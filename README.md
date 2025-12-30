@@ -1,3 +1,13 @@
+---
+title: Portfolio Assistant
+emoji: 🤖
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+license: mit
+---
+
 # 🤖 Portfolio Assistant
 
 A lightweight RAG-powered chatbot that answers questions about your documents. Upload your resume, portfolio, or any documents and chat with them.

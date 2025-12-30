@@ -10,15 +10,15 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from groq import Groq
 
 from loaders import load_document
 from rag import RAGPipeline
+from providers import fetch_models, generate as llm_generate
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -83,6 +83,14 @@ def cleanup_sessions():
 
 class ChatRequest(BaseModel):
     message: str
+    provider: str = "groq"  # "groq" or "huggingface"
+    model: Optional[str] = None  # Model ID (uses default if not specified)
+    api_key: Optional[str] = None  # Client-provided API key
+
+
+class ModelsRequest(BaseModel):
+    provider: str
+    api_key: str
 
 
 class ChatResponse(BaseModel):
@@ -100,28 +108,19 @@ class DocumentResponse(BaseModel):
 # LLM Integration
 # ═══════════════════════════════════════════════════════════════════════════
 
-def generate_answer(question: str, context: List[Dict], history: List[Dict]) -> str:
-    """Generate answer using Groq LLM"""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return "⚠️ GROQ_API_KEY not configured. Please set it in environment variables."
-    
-    client = Groq(api_key=api_key)
-    
-    # Build context from retrieved chunks
+def build_prompt(question: str, context: List[Dict], history: List[Dict]) -> tuple:
+    """Build system and user prompts for LLM"""
     context_text = "\n\n".join([
         f"[Source: {c['source']}]\n{c['text']}" 
         for c in context
     ]) if context else "No documents uploaded yet."
     
-    # Build conversation history
     history_text = "\n".join([
         f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
-        for m in history[-6:]  # Last 3 exchanges
+        for m in history[-6:]
     ]) if history else ""
     
     system_prompt = """You are a helpful AI assistant that answers questions based on the provided documents.
-    
 Rules:
 - Only use information from the provided context
 - If the answer isn't in the context, say "I don't have that information in the uploaded documents"
@@ -135,19 +134,39 @@ Rules:
 
 Answer based on the context above:"""
 
+    return system_prompt, user_prompt
+
+
+def generate_answer(question: str, context: List[Dict], history: List[Dict], 
+                   provider: str = "groq", model: str = None, api_key: str = None) -> str:
+    """Generate answer using selected provider and model"""
+    # Get API key from env if not provided
+    if not api_key:
+        if provider == "groq":
+            api_key = os.getenv("GROQ_API_KEY")
+        else:
+            api_key = os.getenv("HF_API_KEY")
+    
+    if not api_key:
+        return f"⚠️ {provider.title()} API key not provided. Please enter your API key."
+    
+    # Set default models
+    if not model:
+        model = "llama-3.3-70b-versatile" if provider == "groq" else "meta-llama/Llama-3.2-3B-Instruct"
+    
+    system_prompt, user_prompt = build_prompt(question, context, history)
+    
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_tokens=1024,
-            temperature=0.7
+        return llm_generate(
+            provider=provider,
+            prompt=user_prompt,
+            api_key=api_key,
+            model=model,
+            system_prompt=system_prompt,
+            max_tokens=1024
         )
-        return response.choices[0].message.content
     except Exception as e:
-        return f"Error generating response: {str(e)}"
+        return f"Error with {provider}: {str(e)}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -159,6 +178,16 @@ def health_check():
     """Health check endpoint"""
     cleanup_sessions()  # Cleanup on health check
     return {"status": "healthy", "active_sessions": len(sessions)}
+
+
+@app.post("/assistant/models")
+def get_models(request: ModelsRequest):
+    """Fetch available models for a provider"""
+    try:
+        models = fetch_models(request.provider, request.api_key)
+        return {"provider": request.provider, "models": models}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/assistant/upload", response_model=DocumentResponse)
@@ -227,7 +256,7 @@ def chat(request: ChatRequest, x_session_id: str = Header(alias="X-Session-ID"))
     context = session.pipeline.query(request.message, top_k=3)
     
     # Generate answer
-    answer = generate_answer(request.message, context, session.messages)
+    answer = generate_answer(request.message, context, session.messages, request.provider, request.model, request.api_key)
     
     # Update conversation history
     session.messages.append({"role": "user", "content": request.message})
