@@ -1,0 +1,15 @@
+# Core dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Document processing
+pymupdf==1.23.8
+python-docx==1.1.0
+
+# ML/RAG
+sentence-transformers==2.2.2
+faiss-cpu==1.7.4
+
+# LLM
+groq==0.4.2
