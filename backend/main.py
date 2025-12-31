@@ -16,9 +16,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from loaders import load_document
-from rag import RAGPipeline
-from providers import fetch_models, generate as llm_generate
+try:
+    from loaders import load_document
+    from rag import RAGPipeline
+    from providers import fetch_models, generate as llm_generate
+except ImportError:
+    from backend.loaders import load_document
+    from backend.rag import RAGPipeline
+    from backend.providers import fetch_models, generate as llm_generate
 
 
 # ═══════════════════════════════════════════════════════════════════════════
