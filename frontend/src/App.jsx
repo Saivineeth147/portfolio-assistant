@@ -19,18 +19,31 @@ function StarField() {
 
 // Main App
 export default function App() {
-  const [documents, setDocuments] = useState([])
-  const [messages, setMessages] = useState([])
+  // Load initial state from sessionStorage
+  const [documents, setDocuments] = useState(() => {
+    const saved = sessionStorage.getItem('pa_documents')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [messages, setMessages] = useState(() => {
+    const saved = sessionStorage.getItem('pa_messages')
+    return saved ? JSON.parse(saved) : []
+  })
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [provider, setProvider] = useState('groq')  // 'groq' or 'huggingface'
-  const [models, setModels] = useState([])  // Available models
-  const [selectedModel, setSelectedModel] = useState('')  // Selected model ID
+  const [provider, setProvider] = useState(() => {
+    return sessionStorage.getItem('pa_provider') || 'groq'
+  })
+  const [models, setModels] = useState([])
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return sessionStorage.getItem('pa_model') || ''
+  })
   const [loadingModels, setLoadingModels] = useState(false)
-  const [apiKey, setApiKey] = useState('')
-  const [connectionStatus, setConnectionStatus] = useState(null)  // null, 'testing', 'success', 'error'
+  const [apiKey, setApiKey] = useState(() => {
+    return sessionStorage.getItem('pa_apikey') || ''
+  })
+  const [connectionStatus, setConnectionStatus] = useState(null)
   const [apiKeyError, setApiKeyError] = useState(null)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -61,6 +74,27 @@ export default function App() {
       setApiKeyError('Connection failed: ' + err.message)
     }
   }
+
+  // Persist to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('pa_messages', JSON.stringify(messages))
+  }, [messages])
+
+  useEffect(() => {
+    sessionStorage.setItem('pa_documents', JSON.stringify(documents))
+  }, [documents])
+
+  useEffect(() => {
+    sessionStorage.setItem('pa_provider', provider)
+  }, [provider])
+
+  useEffect(() => {
+    if (selectedModel) sessionStorage.setItem('pa_model', selectedModel)
+  }, [selectedModel])
+
+  useEffect(() => {
+    if (apiKey) sessionStorage.setItem('pa_apikey', apiKey)
+  }, [apiKey])
 
   // Reset models when provider changes
   useEffect(() => {
