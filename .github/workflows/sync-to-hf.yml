@@ -20,5 +20,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git remote add space https://Saivineeth147:$HF_TOKEN@huggingface.co/spaces/Saivineeth147/portfolio-assistant
+          git remote add space https://vineeth98:$HF_TOKEN@huggingface.co/spaces/vineeth98/portfolio-assistant
           git push space main --force
