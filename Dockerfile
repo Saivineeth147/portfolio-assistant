@@ -1,37 +1,36 @@
-# Multi-stage build for Portfolio Assistant
 # Stage 1: Build frontend
-FROM node:18-slim AS frontend-builder
-
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Python backend
-FROM python:3.10-slim
+# Stage 2: Python runtime
+FROM python:3.11-slim
 
-# Create non-root user for HuggingFace Spaces
+# Set up user for HuggingFace
 RUN useradd -m -u 1000 user
 USER user
-ENV HOME=/home/user
-ENV PATH=/home/user/.local/bin:$PATH
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
 WORKDIR $HOME/app
 
-# Install Python dependencies
+# Copy requirements first for caching
 COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend
 COPY --chown=user backend/ ./backend/
 
-# Copy frontend build
+# Copy frontend build from stage 1
 COPY --from=frontend-builder --chown=user /app/frontend/dist ./frontend/dist
 
-# Expose port (HuggingFace uses 7860)
-EXPOSE 7860
+# Environment
 ENV PORT=7860
+EXPOSE 7860
 
 # Run server
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7860"]
